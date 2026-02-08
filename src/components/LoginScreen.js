@@ -69,7 +69,7 @@ const LoginScreen = () => {
 
     const demoCredentials = {
       email: 'demo@cropprop.com',
-      password: 'demo123'
+      password: 'demo1234'
     };
 
     const result = await login(demoCredentials);

@@ -79,10 +79,24 @@ class FloraAPI {
       return response;
     }
 
-    const response = await this.client.post('/auth/login', credentials);
-    if (response.token) {
-      this.setAuthToken(response.token);
-      localStorage.setItem('flora_user', JSON.stringify(response.user));
+    // Backend expects {username, password} - username field accepts email too
+    const loginPayload = {
+      username: credentials.email || credentials.username,
+      password: credentials.password
+    };
+
+    const response = await this.client.post('/auth/login', loginPayload);
+
+    // Backend returns {access_token, refresh_token, token_type}
+    if (response.access_token) {
+      this.setAuthToken(response.access_token);
+      localStorage.setItem('flora_refresh_token', response.refresh_token);
+
+      // Fetch user profile after login
+      const user = await this.client.get('/auth/me');
+      localStorage.setItem('flora_user', JSON.stringify(user));
+
+      return { token: response.access_token, user };
     }
     return response;
   }
