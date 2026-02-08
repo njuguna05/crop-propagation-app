@@ -1,0 +1,127 @@
+name: Test and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        run: python -m pytest tests/ -v
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          SECRET_KEY: "test-secret-key-for-ci"
+          ENVIRONMENT: "testing"
+          DEBUG: "false"
+
+  test-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test -- --watchAll=false --passWithNoTests
+        env:
+          CI: true
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          REACT_APP_FLORA_API_URL: "http://102.210.148.91/api/v1"
+          REACT_APP_MOCK_API: "false"
+          REACT_APP_DEBUG: "false"
+
+  deploy:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            APP_DIR="/var/www/crop-propagation-app"
+            REPO_DIR="$APP_DIR/repo"
+
+            # Pull latest code
+            cd $REPO_DIR
+            git fetch origin main
+            git reset --hard origin/main
+
+            # --- Backend deployment ---
+            cd $REPO_DIR/backend
+
+            # Activate virtual environment and install dependencies
+            source $APP_DIR/backend/venv/bin/activate
+            pip install -r requirements.txt --quiet
+
+            # Copy backend code to deployment directory
+            rsync -a --delete \
+              --exclude='venv' \
+              --exclude='.env' \
+              --exclude='__pycache__' \
+              --exclude='*.pyc' \
+              --exclude='*.db' \
+              $REPO_DIR/backend/ $APP_DIR/backend/
+
+            # Run database migrations
+            cd $APP_DIR/backend
+            source venv/bin/activate
+            alembic upgrade head
+
+            # Restart backend service
+            sudo systemctl restart crop-propagation-api
+
+            # --- Frontend deployment ---
+            cd $REPO_DIR
+
+            # Install dependencies and build
+            npm ci --production=false
+            REACT_APP_FLORA_API_URL="http://102.210.148.91/api/v1" \
+            REACT_APP_MOCK_API="false" \
+            REACT_APP_DEBUG="false" \
+            npm run build
+
+            # Deploy build to web root
+            rsync -a --delete $REPO_DIR/build/ $APP_DIR/frontend/
+
+            # Reload nginx
+            sudo systemctl reload nginx
+
+            echo "Deployment completed successfully!"

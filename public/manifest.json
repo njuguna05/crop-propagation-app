@@ -1,25 +1,47 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "name": "FloraTrack - Professional Crop Propagation Management",
+  "short_name": "FloraTrack",
+  "description": "Professional crop propagation management system for modern agricultural operations. Track plants from budwood collection to harvest with comprehensive analytics and team collaboration tools.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["agriculture", "productivity", "utilities"],
   "icons": [
     {
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "type": "image/x-icon",
+      "purpose": "any"
     },
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "maskable any"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "maskable any"
     }
   ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "shortcuts": [
+    {
+      "name": "Quick Add Crop",
+      "short_name": "Add Crop",
+      "description": "Quickly add a new crop to propagation",
+      "url": "/crops/new"
+    },
+    {
+      "name": "Task Dashboard",
+      "short_name": "Tasks",
+      "description": "View and manage propagation tasks",
+      "url": "/tasks"
+    }
+  ]
 }
