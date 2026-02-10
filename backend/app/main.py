@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import logging
 from app.core.config import settings
 from app.core.database import init_db, close_db
+from app.core.tenant_middleware import TenantMiddleware
 from app.api.v1.api import api_router
 
 
@@ -65,6 +66,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Tenant Middleware - Extract tenant_id from JWT tokens
+app.add_middleware(TenantMiddleware)
 
 
 # Global exception handler
