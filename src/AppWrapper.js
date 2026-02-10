@@ -12,6 +12,7 @@ import OfflineIndicator from './components/OfflineIndicator';
 import SyncStatus from './components/SyncStatus';
 
 // Create a client for React Query
+// Updated: 2026-02-10 - Multi-tenant SaaS with admin dashboard
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
