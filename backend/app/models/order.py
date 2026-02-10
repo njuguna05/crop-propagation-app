@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Text, JSON, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Text, JSON, ForeignKey, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -7,12 +7,16 @@ class Order(Base):
     """Order model for propagation orders and workflow tracking"""
 
     __tablename__ = "orders"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'order_number', name='uq_order_tenant_order_number'),
+    )
 
     id = Column(String(50), primary_key=True, index=True)  # PO-2024-001 format
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Order identification
-    order_number = Column(String(50), unique=True, nullable=False, index=True)
+    order_number = Column(String(50), nullable=False, index=True)
     status = Column(String(50), nullable=False, index=True)  # order_created, in_propagation, etc.
     current_section = Column(String(50), nullable=True, index=True)  # greenhouse, nursery, etc.
 
@@ -56,6 +60,7 @@ class Order(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="orders")
     owner = relationship("User", back_populates="orders")
     tasks = relationship("Task", back_populates="order", cascade="all, delete-orphan")
     budwood_records = relationship("BudwoodCollection", back_populates="order", cascade="all, delete-orphan")
@@ -73,6 +78,7 @@ class OrderStageHistory(Base):
     __tablename__ = "order_stage_history"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     order_id = Column(String(50), ForeignKey("orders.id"), nullable=False)
 
     # Stage information

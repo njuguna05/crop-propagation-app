@@ -1,7 +1,11 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
 from .common import TimestampMixin
-
+# Avoid circular import by using ForwardRef or treating as dict if needed, 
+# but here we can likely import if careful. 
+# Actually, let's use strings for forward reference or just import if no cycle.
+# User schema doesn't depend on Tenant schema usually, but Tenant might depend on User.
+# Let's try importing.
+from typing import Optional, List
+from pydantic import BaseModel, EmailStr, Field
 
 # User schemas
 class UserBase(BaseModel):
@@ -35,6 +39,7 @@ class UserResponse(UserBase, TimestampMixin):
     """User response schema"""
     id: int
     is_superuser: bool = False
+    tenants: List[dict] = []  # We use dict to avoid circular imports with TenantListItem
 
     class Config:
         from_attributes = True

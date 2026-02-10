@@ -19,6 +19,7 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    tenant_memberships = relationship("TenantUser", foreign_keys="TenantUser.user_id", back_populates="user", cascade="all, delete-orphan")
     crops = relationship("Crop", back_populates="owner", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="owner", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="owner", cascade="all, delete-orphan")

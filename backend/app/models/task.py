@@ -9,6 +9,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     crop_id = Column(Integer, ForeignKey("crops.id"), nullable=True)  # Optional: general tasks don't need crop
     order_id = Column(String(50), ForeignKey("orders.id"), nullable=True)  # Optional: order-specific tasks
@@ -27,6 +28,7 @@ class Task(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="tasks")
     owner = relationship("User", back_populates="tasks")
     crop = relationship("Crop", back_populates="tasks")
     order = relationship("Order", back_populates="tasks")

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DESCRIPTION: str = "FastAPI backend for crop propagation management system"
 
     # CORS Configuration
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://localhost:3300,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3300"
 
     @property
     def cors_origins(self) -> list[str]:

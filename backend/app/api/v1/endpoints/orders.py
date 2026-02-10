@@ -12,7 +12,8 @@ from app.schemas.order import (
     OrderTransfer, HealthAssessment, OrderStats
 )
 from app.schemas.common import MessageResponse
-from app.dependencies import CurrentUserDep
+from app.schemas.common import MessageResponse
+from app.dependencies import CurrentUserDep, CurrentTenantDep
 
 
 router = APIRouter()
@@ -26,6 +27,7 @@ def generate_order_number(year: int, sequence: int) -> str:
 @router.get("/", response_model=List[OrderResponse])
 async def get_orders(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db),
     since: Optional[datetime] = Query(None, description="Get orders updated since this timestamp"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
@@ -39,7 +41,13 @@ async def get_orders(
     """
     Get orders with filtering and incremental sync support
     """
-    query = select(Order).where(Order.user_id == current_user.id)
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    query = select(Order).where(Order.tenant_id == current_tenant.id)
 
     # Add filters
     if since:
@@ -70,25 +78,41 @@ async def get_orders(
 async def create_order(
     order_data: OrderCreate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Create a new propagation order
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get current year for order numbering
     current_year = date.today().year
 
-    # Get the next sequence number for this year
-    count_result = await db.execute(
-        select(func.count(Order.id))
+    # Get the max sequence number for this year (scoped to tenant)
+    # Using func.max to avoid race conditions with concurrent requests
+    max_order_result = await db.execute(
+        select(func.max(Order.order_number))
         .where(
             and_(
-                Order.user_id == current_user.id,
+                Order.tenant_id == current_tenant.id,
                 Order.order_number.like(f"PO-{current_year}-%")
             )
         )
+        .with_for_update()  # Lock the rows to prevent concurrent access
     )
-    sequence = count_result.scalar() + 1
+    max_order_number = max_order_result.scalar()
+
+    # Extract sequence from max order number or start at 1
+    if max_order_number:
+        # Extract sequence from format PO-2024-001
+        sequence = int(max_order_number.split('-')[-1]) + 1
+    else:
+        sequence = 1
 
     # Generate order number and ID
     order_number = generate_order_number(current_year, sequence)
@@ -111,6 +135,7 @@ async def create_order(
     db_order = Order(
         id=order_id,
         user_id=current_user.id,
+        tenant_id=current_tenant.id,
         order_number=order_number,
         status="order_created",
         order_date=date.today(),
@@ -125,6 +150,7 @@ async def create_order(
 
     # Create stage history record
     stage_history_record = OrderStageHistory(
+        tenant_id=current_tenant.id,
         order_id=order_id,
         stage="order_created",
         date=date.today(),
@@ -143,14 +169,21 @@ async def create_order(
 async def get_order(
     order_id: str,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get a specific order with stage history
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
     result = await db.execute(
         select(Order).where(
-            and_(Order.id == order_id, Order.user_id == current_user.id)
+            and_(Order.id == order_id, Order.tenant_id == current_tenant.id)
         ).options(
             selectinload(Order.stage_history_records),
             selectinload(Order.tasks),
@@ -173,15 +206,22 @@ async def update_order(
     order_id: str,
     order_update: OrderUpdate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Update order details
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing order
     result = await db.execute(
         select(Order).where(
-            and_(Order.id == order_id, Order.user_id == current_user.id)
+            and_(Order.id == order_id, Order.tenant_id == current_tenant.id)
         )
     )
     order = result.scalar_one_or_none()
@@ -216,15 +256,22 @@ async def update_order_status(
     order_id: str,
     status_update: OrderStatusUpdate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Update order status and log stage history
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing order
     result = await db.execute(
         select(Order).where(
-            and_(Order.id == order_id, Order.user_id == current_user.id)
+            and_(Order.id == order_id, Order.tenant_id == current_tenant.id)
         )
     )
     order = result.scalar_one_or_none()
@@ -256,6 +303,7 @@ async def update_order_status(
 
     # Create stage history record
     stage_history_record = OrderStageHistory(
+        tenant_id=current_tenant.id,
         order_id=order_id,
         stage=status_update.status,
         date=date.today(),
@@ -276,15 +324,22 @@ async def transfer_order_stage(
     order_id: str,
     transfer_data: OrderTransfer,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Transfer order between stages/sections
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing order
     result = await db.execute(
         select(Order).where(
-            and_(Order.id == order_id, Order.user_id == current_user.id)
+            and_(Order.id == order_id, Order.tenant_id == current_tenant.id)
         )
     )
     order = result.scalar_one_or_none()
@@ -324,6 +379,7 @@ async def transfer_order_stage(
 
     # Create stage history record
     stage_history_record = OrderStageHistory(
+        tenant_id=current_tenant.id,
         order_id=order_id,
         stage=transfer_data.to_stage,
         date=date.today(),
@@ -347,15 +403,22 @@ async def record_health_assessment(
     order_id: str,
     health_data: HealthAssessment,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Record plant losses/health assessment
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing order
     result = await db.execute(
         select(Order).where(
-            and_(Order.id == order_id, Order.user_id == current_user.id)
+            and_(Order.id == order_id, Order.tenant_id == current_tenant.id)
         )
     )
     order = result.scalar_one_or_none()
@@ -402,15 +465,22 @@ async def record_health_assessment(
 async def delete_order(
     order_id: str,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Delete an order
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing order
     result = await db.execute(
         select(Order).where(
-            and_(Order.id == order_id, Order.user_id == current_user.id)
+            and_(Order.id == order_id, Order.tenant_id == current_tenant.id)
         )
     )
     order = result.scalar_one_or_none()
@@ -430,12 +500,19 @@ async def delete_order(
 @router.get("/stats/overview", response_model=OrderStats)
 async def get_order_statistics(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get order statistics and overview
     """
-    user_filter = Order.user_id == current_user.id
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    user_filter = Order.tenant_id == current_tenant.id
 
     # Total orders
     total_result = await db.execute(

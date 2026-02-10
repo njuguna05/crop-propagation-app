@@ -14,7 +14,8 @@ from app.schemas.records import (
     BudwoodStats, GraftingStats, TransferStats
 )
 from app.schemas.common import MessageResponse
-from app.dependencies import CurrentUserDep
+from app.schemas.common import MessageResponse
+from app.dependencies import CurrentUserDep, CurrentTenantDep
 
 
 router = APIRouter()
@@ -30,6 +31,7 @@ def generate_record_id(prefix: str) -> str:
 @router.get("/budwood", response_model=List[BudwoodCollectionResponse])
 async def get_budwood_records(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db),
     since: Optional[datetime] = Query(None, description="Get records updated since this timestamp"),
     order_id: Optional[str] = Query(None, description="Filter by order ID"),
@@ -41,7 +43,13 @@ async def get_budwood_records(
     """
     Get budwood collection records with filtering
     """
-    query = select(BudwoodCollection).where(BudwoodCollection.user_id == current_user.id)
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    query = select(BudwoodCollection).where(BudwoodCollection.tenant_id == current_tenant.id)
 
     # Add filters
     if since:
@@ -66,6 +74,7 @@ async def get_budwood_records(
 async def create_budwood_record(
     record_data: BudwoodCollectionCreate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -75,7 +84,7 @@ async def create_budwood_record(
     if record_data.order_id:
         order_result = await db.execute(
             select(Order).where(
-                and_(Order.id == record_data.order_id, Order.user_id == current_user.id)
+                and_(Order.id == record_data.order_id, Order.tenant_id == current_tenant.id)
             )
         )
         if not order_result.scalar_one_or_none():
@@ -91,6 +100,7 @@ async def create_budwood_record(
     db_record = BudwoodCollection(
         id=record_id,
         user_id=current_user.id,
+        tenant_id=current_tenant.id,
         **record_data.model_dump()
     )
 
@@ -105,14 +115,21 @@ async def create_budwood_record(
 async def get_budwood_record(
     record_id: str,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get a specific budwood collection record
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
     result = await db.execute(
         select(BudwoodCollection).where(
-            and_(BudwoodCollection.id == record_id, BudwoodCollection.user_id == current_user.id)
+            and_(BudwoodCollection.id == record_id, BudwoodCollection.tenant_id == current_tenant.id)
         ).options(selectinload(BudwoodCollection.order))
     )
     record = result.scalar_one_or_none()
@@ -131,15 +148,22 @@ async def update_budwood_record(
     record_id: str,
     record_update: BudwoodCollectionUpdate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Update budwood collection record
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing record
     result = await db.execute(
         select(BudwoodCollection).where(
-            and_(BudwoodCollection.id == record_id, BudwoodCollection.user_id == current_user.id)
+            and_(BudwoodCollection.id == record_id, BudwoodCollection.tenant_id == current_tenant.id)
         )
     )
     record = result.scalar_one_or_none()
@@ -154,7 +178,7 @@ async def update_budwood_record(
     if record_update.order_id and record_update.order_id != record.order_id:
         order_result = await db.execute(
             select(Order).where(
-                and_(Order.id == record_update.order_id, Order.user_id == current_user.id)
+                and_(Order.id == record_update.order_id, Order.tenant_id == current_tenant.id)
             )
         )
         if not order_result.scalar_one_or_none():
@@ -178,6 +202,7 @@ async def update_budwood_record(
 @router.get("/grafting", response_model=List[GraftingRecordResponse])
 async def get_grafting_records(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db),
     since: Optional[datetime] = Query(None, description="Get records updated since this timestamp"),
     order_id: Optional[str] = Query(None, description="Filter by order ID"),
@@ -189,7 +214,13 @@ async def get_grafting_records(
     """
     Get grafting operation records with filtering
     """
-    query = select(GraftingRecord).where(GraftingRecord.user_id == current_user.id)
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    query = select(GraftingRecord).where(GraftingRecord.tenant_id == current_tenant.id)
 
     # Add filters
     if since:
@@ -214,6 +245,7 @@ async def get_grafting_records(
 async def create_grafting_record(
     record_data: GraftingRecordCreate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -238,7 +270,7 @@ async def create_grafting_record(
             select(BudwoodCollection).where(
                 and_(
                     BudwoodCollection.id == record_data.budwood_collection_id,
-                    BudwoodCollection.user_id == current_user.id
+                    BudwoodCollection.tenant_id == current_tenant.id
                 )
             )
         )
@@ -261,6 +293,7 @@ async def create_grafting_record(
     db_record = GraftingRecord(
         id=record_id,
         user_id=current_user.id,
+        tenant_id=current_tenant.id,
         success_rate=success_rate,
         **record_data.model_dump()
     )
@@ -276,6 +309,7 @@ async def create_grafting_record(
 @router.get("/transfers", response_model=List[TransferRecordResponse])
 async def get_transfer_records(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db),
     since: Optional[datetime] = Query(None, description="Get records updated since this timestamp"),
     order_id: Optional[str] = Query(None, description="Filter by order ID"),
@@ -288,7 +322,13 @@ async def get_transfer_records(
     """
     Get transfer records between stages with filtering
     """
-    query = select(TransferRecord).where(TransferRecord.user_id == current_user.id)
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    query = select(TransferRecord).where(TransferRecord.tenant_id == current_tenant.id)
 
     # Add filters
     if since:
@@ -315,6 +355,7 @@ async def get_transfer_records(
 async def create_transfer_record(
     record_data: TransferRecordCreate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -323,7 +364,7 @@ async def create_transfer_record(
     # Validate order exists
     order_result = await db.execute(
         select(Order).where(
-            and_(Order.id == record_data.order_id, Order.user_id == current_user.id)
+            and_(Order.id == record_data.order_id, Order.tenant_id == current_tenant.id)
         )
     )
     order = order_result.scalar_one_or_none()
@@ -340,6 +381,7 @@ async def create_transfer_record(
     db_record = TransferRecord(
         id=record_id,
         user_id=current_user.id,
+        tenant_id=current_tenant.id,
         **record_data.model_dump()
     )
 
@@ -354,12 +396,19 @@ async def create_transfer_record(
 @router.get("/budwood/stats", response_model=BudwoodStats)
 async def get_budwood_statistics(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get budwood collection statistics
     """
-    user_filter = BudwoodCollection.user_id == current_user.id
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    user_filter = BudwoodCollection.tenant_id == current_tenant.id
 
     # Total collections and quantity
     totals_result = await db.execute(
@@ -404,12 +453,19 @@ async def get_budwood_statistics(
 @router.get("/grafting/stats", response_model=GraftingStats)
 async def get_grafting_statistics(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get grafting operation statistics
     """
-    user_filter = GraftingRecord.user_id == current_user.id
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+    
+    user_filter = GraftingRecord.tenant_id == current_tenant.id
 
     # Total grafts and success
     totals_result = await db.execute(
@@ -477,12 +533,19 @@ async def get_grafting_statistics(
 @router.get("/transfers/stats", response_model=TransferStats)
 async def get_transfer_statistics(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get transfer operation statistics
     """
-    user_filter = TransferRecord.user_id == current_user.id
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
+    user_filter = TransferRecord.tenant_id == current_tenant.id
 
     # Total transfers and quantities
     totals_result = await db.execute(

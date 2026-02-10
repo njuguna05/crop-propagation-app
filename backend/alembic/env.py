@@ -10,7 +10,7 @@ load_dotenv()
 
 # Import your models here
 from app.core.database import Base
-from app.models import user, crop, task, order, records, customer, supplier
+from app.models import user, crop, task, order, records, customer, supplier, tenant
 
 # This is the Alembic Config object
 config = context.config

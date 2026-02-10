@@ -6,6 +6,7 @@ from httpx import AsyncClient, ASGITransport
 from app.core.database import Base, get_db
 from app.core.security import get_password_hash, create_access_token
 from app.models.user import User
+from app.models.tenant import Tenant, TenantUser, TenantRole
 from app.main import app
 
 
@@ -69,10 +70,44 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
-async def auth_headers(test_user: User) -> dict:
-    """Create authentication headers with a valid JWT token."""
+async def test_tenant(db_session: AsyncSession) -> Tenant:
+    """Create a test tenant."""
+    tenant = Tenant(
+        name="Test Organization",
+        subdomain="test-org",
+        description="Test tenant for unit tests",
+        is_active=True,
+        subscription_tier="premium"
+    )
+    db_session.add(tenant)
+    await db_session.commit()
+    await db_session.refresh(tenant)
+    return tenant
+
+
+@pytest.fixture
+async def tenant_user(db_session: AsyncSession, test_user: User, test_tenant: Tenant) -> TenantUser:
+    """Create tenant-user association with owner role."""
+    tenant_user = TenantUser(
+        tenant_id=test_tenant.id,
+        user_id=test_user.id,
+        role=TenantRole.OWNER,
+        is_active=True
+    )
+    db_session.add(tenant_user)
+    await db_session.commit()
+    await db_session.refresh(tenant_user)
+    return tenant_user
+
+
+@pytest.fixture
+async def auth_headers(test_user: User, test_tenant: Tenant, tenant_user: TenantUser) -> dict:
+    """Create authentication headers with JWT token and tenant ID."""
     access_token = create_access_token(data={"sub": str(test_user.id)})
-    return {"Authorization": f"Bearer {access_token}"}
+    return {
+        "Authorization": f"Bearer {access_token}",
+        "X-Tenant-ID": str(test_tenant.id)
+    }
 
 
 @pytest.fixture

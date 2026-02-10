@@ -30,7 +30,14 @@ export const useAppStore = create(
       orders: [],
       budwoodCollection: [],
       graftingRecords: [],
+      budwoodCollection: [],
+      graftingRecords: [],
       transferRecords: [],
+
+      // Tenant state
+      currentTenant: null,
+      userTenants: [],
+      tenantRole: null,
 
       // UI state
       activeTab: 'dashboard',
@@ -59,6 +66,24 @@ export const useAppStore = create(
 
       setLastSyncTime: (time) => set({ lastSyncTime: time }),
 
+      // Tenant actions
+      setCurrentTenant: (tenant) => {
+        set({
+          currentTenant: tenant,
+          tenantRole: tenant?.role || null
+        });
+        // Update API headers
+        if (tenant) {
+          floraAPI.setTenantId(tenant.id);
+        } else {
+          floraAPI.setTenantId(null);
+        }
+      },
+
+      setUserTenants: (tenants) => set({ userTenants: tenants }),
+
+      setTenantRole: (role) => set({ tenantRole: role }),
+
       // Authentication actions
       login: async (credentials) => {
         set({ isLoading: true });
@@ -83,6 +108,7 @@ export const useAppStore = create(
 
       logout: async () => {
         floraAPI.logout();
+        floraAPI.setTenantId(null);
         await db.clearAllData();
         set({
           user: null,
@@ -102,6 +128,14 @@ export const useAppStore = create(
       initializeApp: async () => {
         set({ isLoading: true });
         try {
+          const currentUser = get().user;
+
+          // Skip data sync for superuser/admin accounts
+          if (currentUser?.is_superuser) {
+            set({ isInitialized: true, isLoading: false });
+            return;
+          }
+
           // Initialize database
           await initializeDatabase();
 
@@ -156,7 +190,7 @@ export const useAppStore = create(
           ...cropData,
           id: Date.now(), // Temporary ID
           plantedDate: new Date().toISOString().split('T')[0],
-          expectedGermination: new Date(Date.now() + 10*24*60*60*1000).toISOString().split('T')[0],
+          expectedGermination: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           currentStage: 'planted',
           temperature: 20,
           humidity: 65,
@@ -478,8 +512,8 @@ export const useAppStore = create(
         const { orders, searchTerm, filterStatus, filterSection } = get();
         return orders.filter(order => {
           const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                               order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                               order.variety.toLowerCase().includes(searchTerm.toLowerCase());
+            order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.variety.toLowerCase().includes(searchTerm.toLowerCase());
           const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
           const matchesSection = filterSection === 'all' || order.currentSection === filterSection;
           return matchesSearch && matchesStatus && matchesSection;
@@ -528,7 +562,9 @@ export const useAppStore = create(
         isAuthenticated: state.isAuthenticated,
         authToken: state.authToken,
         activeTab: state.activeTab,
-        lastSyncTime: state.lastSyncTime
+        activeTab: state.activeTab,
+        lastSyncTime: state.lastSyncTime,
+        currentTenant: state.currentTenant
       })
     }
   )

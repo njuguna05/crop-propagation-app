@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppStore } from './stores/appStore';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
-import LandingPage from './components/LandingPage';
+import EnhancedLandingPage from './components/EnhancedLandingPage';
+import TenantCreation from './components/TenantCreation';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
 import LoadingScreen from './components/LoadingScreen';
 import OfflineIndicator from './components/OfflineIndicator';
 import SyncStatus from './components/SyncStatus';
@@ -20,6 +24,7 @@ const queryClient = new QueryClient({
 
 const AppWrapper = () => {
   const {
+    user,
     isAuthenticated,
     isInitialized,
     isLoading,
@@ -70,24 +75,30 @@ const AppWrapper = () => {
     return <LoadingScreen />;
   }
 
-  // Show landing page if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-100">
-        <LandingPage />
-        {!isOnline && <OfflineIndicator />}
-      </div>
-    );
-  }
-
-  // Show main app
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-gray-100">
-        <App />
-        {!isOnline && <OfflineIndicator />}
-        <SyncStatus />
-      </div>
+      <Router>
+        <div className="min-h-screen bg-gray-100">
+          {!isAuthenticated ? (
+            <Routes>
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/tenants/create" element={<TenantCreation />} />
+              <Route path="*" element={<EnhancedLandingPage />} />
+            </Routes>
+          ) : user?.is_superuser ? (
+            <Routes>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="*" element={<Navigate to="/admin" replace />} />
+            </Routes>
+          ) : (
+            <Routes>
+              <Route path="/*" element={<App />} />
+            </Routes>
+          )}
+          {!isOnline && <OfflineIndicator />}
+          {isAuthenticated && !user?.is_superuser && <SyncStatus />}
+        </div>
+      </Router>
     </QueryClientProvider>
   );
 };

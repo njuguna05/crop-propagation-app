@@ -1,5 +1,6 @@
 import { db } from './database';
 import { floraAPI } from './floraAPI';
+import { useAppStore } from '../stores/appStore';
 
 // Sync service for offline/online data synchronization
 class SyncService {
@@ -23,10 +24,16 @@ class SyncService {
 
     // Auto-sync interval (every 5 minutes when online)
     setInterval(() => {
-      if (this.isOnline && !this.isSyncing) {
+      if (this.isOnline && !this.isSyncing && !this.isAdminUser()) {
         this.startSync();
       }
     }, 5 * 60 * 1000);
+  }
+
+  // Check if current user is a superuser/admin
+  isAdminUser() {
+    const state = useAppStore.getState();
+    return state.user?.is_superuser === true;
   }
 
   // Add sync listener
@@ -65,6 +72,12 @@ class SyncService {
 
   // Start sync process
   async startSync(force = false) {
+    // Skip sync for admin/superuser accounts
+    if (this.isAdminUser()) {
+      console.log('Skipping sync for admin user');
+      return { success: false, error: 'admin_user' };
+    }
+
     if (!this.isOnline) {
       console.log('Cannot sync: offline');
       return { success: false, error: 'offline' };
@@ -406,6 +419,12 @@ class SyncService {
 
   // Force full sync (downloads everything from server)
   async forceSyncFromServer() {
+    // Skip sync for admin/superuser accounts
+    if (this.isAdminUser()) {
+      console.log('Skipping full sync for admin user');
+      return { success: false, error: 'admin_user' };
+    }
+
     try {
       this.notifyListeners({ type: 'full_sync_start' });
 

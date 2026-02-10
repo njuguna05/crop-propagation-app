@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -17,9 +17,9 @@ def create_access_token(
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
@@ -57,7 +57,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
             return None
 
         # Check expiration
-        if datetime.utcnow() > datetime.fromtimestamp(payload.get("exp", 0)):
+        if datetime.now(timezone.utc).timestamp() > payload.get("exp", 0):
             return None
 
         return payload

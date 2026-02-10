@@ -6,9 +6,10 @@ class FloraAPI {
   constructor() {
     this.baseURL = process.env.REACT_APP_FLORA_API_URL || 'https://github.com/devafrichama/Floraerp';
     this.token = localStorage.getItem('flora_auth_token');
+    this.tenantId = localStorage.getItem('currentTenantId');
 
-    // Use mock API if in development or if REACT_APP_MOCK_API is true
-    this.useMockAPI = process.env.NODE_ENV === 'development' || process.env.REACT_APP_MOCK_API === 'true';
+    // Use mock API only if explicitly enabled
+    this.useMockAPI = process.env.REACT_APP_MOCK_API === 'true';
 
     if (this.useMockAPI) {
       console.log('🔧 Using Mock API for development');
@@ -24,12 +25,18 @@ class FloraAPI {
       }
     });
 
-    // Request interceptor to add auth token
+    // Request interceptor to add auth token and tenant ID
     this.client.interceptors.request.use(
       (config) => {
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
+
+        // Add tenant ID header if available
+        if (this.tenantId) {
+          config.headers['X-Tenant-ID'] = this.tenantId;
+        }
+
         return config;
       },
       (error) => Promise.reject(error)
@@ -59,6 +66,16 @@ class FloraAPI {
   setAuthToken(token) {
     this.token = token;
     localStorage.setItem('flora_auth_token', token);
+  }
+
+  // Set current tenant ID
+  setTenantId(tenantId) {
+    this.tenantId = tenantId;
+    if (tenantId) {
+      localStorage.setItem('currentTenantId', tenantId);
+    } else {
+      localStorage.removeItem('currentTenantId');
+    }
   }
 
   // Clear authentication

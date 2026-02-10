@@ -9,6 +9,7 @@ class BudwoodCollection(Base):
     __tablename__ = "budwood_collection"
 
     id = Column(String(50), primary_key=True, index=True)  # BW-timestamp format
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     order_id = Column(String(50), ForeignKey("orders.id"), nullable=True)
 
@@ -33,6 +34,7 @@ class BudwoodCollection(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="budwood_records")
     owner = relationship("User", back_populates="budwood_records")
     order = relationship("Order", back_populates="budwood_records")
 
@@ -46,6 +48,7 @@ class GraftingRecord(Base):
     __tablename__ = "grafting_records"
 
     id = Column(String(50), primary_key=True, index=True)  # GR-timestamp format
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     order_id = Column(String(50), ForeignKey("orders.id"), nullable=True)
     budwood_collection_id = Column(String(50), ForeignKey("budwood_collection.id"), nullable=True)
@@ -74,6 +77,7 @@ class GraftingRecord(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="grafting_records")
     owner = relationship("User", back_populates="grafting_records")
     order = relationship("Order", back_populates="grafting_records")
     budwood_collection = relationship("BudwoodCollection")
@@ -88,6 +92,7 @@ class TransferRecord(Base):
     __tablename__ = "transfer_records"
 
     id = Column(String(50), primary_key=True, index=True)  # TR-timestamp format
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     order_id = Column(String(50), ForeignKey("orders.id"), nullable=False)
 
@@ -112,6 +117,7 @@ class TransferRecord(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="transfer_records")
     owner = relationship("User", back_populates="transfer_records")
     order = relationship("Order", back_populates="transfer_records")
 

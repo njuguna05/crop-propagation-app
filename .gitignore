@@ -39,3 +39,5 @@ backend/uploads/
 
 # OS
 Thumbs.db
+nul
+.claude/

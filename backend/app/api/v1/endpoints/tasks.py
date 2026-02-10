@@ -10,7 +10,8 @@ from app.models.crop import Crop
 from app.models.order import Order
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskCompletion, TaskStats
 from app.schemas.common import MessageResponse
-from app.dependencies import CurrentUserDep
+from app.schemas.common import MessageResponse
+from app.dependencies import CurrentUserDep, CurrentTenantDep
 
 
 router = APIRouter()
@@ -19,6 +20,7 @@ router = APIRouter()
 @router.get("/", response_model=List[TaskResponse])
 async def get_tasks(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db),
     since: Optional[datetime] = Query(None, description="Get tasks updated since this timestamp"),
     crop_id: Optional[int] = Query(None, description="Filter by crop ID"),
@@ -32,7 +34,13 @@ async def get_tasks(
     """
     Get tasks with filtering options and incremental sync support
     """
-    query = select(Task).where(Task.user_id == current_user.id)
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    query = select(Task).where(Task.tenant_id == current_tenant.id)
 
     # Add filters
     if since:
@@ -61,16 +69,17 @@ async def get_tasks(
 async def create_task(
     task_data: TaskCreate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Create a new task
     """
-    # Validate crop_id exists and belongs to user
+    # Validate crop_id exists and belongs to tenant
     if task_data.crop_id:
         crop_result = await db.execute(
             select(Crop).where(
-                and_(Crop.id == task_data.crop_id, Crop.user_id == current_user.id)
+                and_(Crop.id == task_data.crop_id, Crop.tenant_id == current_tenant.id)
             )
         )
         if not crop_result.scalar_one_or_none():
@@ -79,11 +88,11 @@ async def create_task(
                 detail="Crop not found or not accessible"
             )
 
-    # Validate order_id exists and belongs to user
+    # Validate order_id exists and belongs to tenant
     if task_data.order_id:
         order_result = await db.execute(
             select(Order).where(
-                and_(Order.id == task_data.order_id, Order.user_id == current_user.id)
+                and_(Order.id == task_data.order_id, Order.tenant_id == current_tenant.id)
             )
         )
         if not order_result.scalar_one_or_none():
@@ -95,6 +104,7 @@ async def create_task(
     # Create task instance
     db_task = Task(
         user_id=current_user.id,
+        tenant_id=current_tenant.id,
         **task_data.model_dump()
     )
 
@@ -109,14 +119,21 @@ async def create_task(
 async def get_task(
     task_id: int,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get a specific task by ID
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
     result = await db.execute(
         select(Task).where(
-            and_(Task.id == task_id, Task.user_id == current_user.id)
+            and_(Task.id == task_id, Task.tenant_id == current_tenant.id)
         ).options(selectinload(Task.crop), selectinload(Task.order))
     )
     task = result.scalar_one_or_none()
@@ -135,15 +152,22 @@ async def update_task(
     task_id: int,
     task_update: TaskUpdate,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Update task details
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing task
     result = await db.execute(
         select(Task).where(
-            and_(Task.id == task_id, Task.user_id == current_user.id)
+            and_(Task.id == task_id, Task.tenant_id == current_tenant.id)
         )
     )
     task = result.scalar_one_or_none()
@@ -158,7 +182,7 @@ async def update_task(
     if task_update.crop_id and task_update.crop_id != task.crop_id:
         crop_result = await db.execute(
             select(Crop).where(
-                and_(Crop.id == task_update.crop_id, Crop.user_id == current_user.id)
+                and_(Crop.id == task_update.crop_id, Crop.tenant_id == current_tenant.id)
             )
         )
         if not crop_result.scalar_one_or_none():
@@ -171,7 +195,7 @@ async def update_task(
     if task_update.order_id and task_update.order_id != task.order_id:
         order_result = await db.execute(
             select(Order).where(
-                and_(Order.id == task_update.order_id, Order.user_id == current_user.id)
+                and_(Order.id == task_update.order_id, Order.tenant_id == current_tenant.id)
             )
         )
         if not order_result.scalar_one_or_none():
@@ -196,15 +220,22 @@ async def toggle_task_completion(
     task_id: int,
     completion: TaskCompletion,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Toggle task completion status
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
     # Get existing task
     result = await db.execute(
         select(Task).where(
-            and_(Task.id == task_id, Task.user_id == current_user.id)
+            and_(Task.id == task_id, Task.tenant_id == current_tenant.id)
         )
     )
     task = result.scalar_one_or_none()
@@ -228,15 +259,22 @@ async def toggle_task_completion(
 async def delete_task(
     task_id: int,
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Delete a task
     """
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+
     # Get existing task
     result = await db.execute(
         select(Task).where(
-            and_(Task.id == task_id, Task.user_id == current_user.id)
+            and_(Task.id == task_id, Task.tenant_id == current_tenant.id)
         )
     )
     task = result.scalar_one_or_none()
@@ -256,12 +294,19 @@ async def delete_task(
 @router.get("/stats/overview", response_model=TaskStats)
 async def get_task_statistics(
     current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get task statistics and overview
     """
-    user_filter = Task.user_id == current_user.id
+    if not current_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context required"
+        )
+        
+    user_filter = Task.tenant_id == current_tenant.id
 
     # Total tasks
     total_result = await db.execute(

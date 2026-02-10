@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..core.database import Base
@@ -8,6 +8,7 @@ class Supplier(Base):
     __tablename__ = "suppliers"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     company_name = Column(String(200), nullable=False, index=True)
     contact_person = Column(String(100), nullable=False)
     email = Column(String(100), index=True)
@@ -45,6 +46,7 @@ class Supplier(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="suppliers")
     catalog_items = relationship("SupplierCatalog", back_populates="supplier")
     purchase_orders = relationship("PurchaseOrder", back_populates="supplier")
 
@@ -53,6 +55,7 @@ class SupplierCatalog(Base):
     __tablename__ = "supplier_catalog"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False)
 
     # Product information
@@ -93,9 +96,13 @@ class SupplierCatalog(Base):
 
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'po_number', name='uq_po_tenant_po_number'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    po_number = Column(String(50), unique=True, nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    po_number = Column(String(50), nullable=False, index=True)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False)
 
     # Order details
@@ -140,6 +147,7 @@ class PurchaseOrderItem(Base):
     __tablename__ = "purchase_order_items"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
     catalog_item_id = Column(Integer, ForeignKey("supplier_catalog.id"), nullable=True)
 
@@ -179,6 +187,7 @@ class SupplierEvaluation(Base):
     __tablename__ = "supplier_evaluations"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False)
     purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=True)
 
