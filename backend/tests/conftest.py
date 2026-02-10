@@ -70,6 +70,23 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def superuser(db_session: AsyncSession) -> User:
+    """Create a superuser for admin endpoint tests."""
+    user = User(
+        email="admin@example.com",
+        username="admin",
+        hashed_password=get_password_hash("adminpassword123"),
+        full_name="Admin User",
+        is_active=True,
+        is_superuser=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
 async def test_tenant(db_session: AsyncSession) -> Tenant:
     """Create a test tenant."""
     tenant = Tenant(
@@ -102,11 +119,23 @@ async def tenant_user(db_session: AsyncSession, test_user: User, test_tenant: Te
 
 @pytest.fixture
 async def auth_headers(test_user: User, test_tenant: Tenant, tenant_user: TenantUser) -> dict:
-    """Create authentication headers with JWT token and tenant ID."""
-    access_token = create_access_token(data={"sub": str(test_user.id)})
+    """Create authentication headers with JWT token including tenant_id."""
+    # Include tenant_id in the JWT token payload (matches production behavior)
+    access_token = create_access_token(data={
+        "sub": str(test_user.id),
+        "tenant_id": test_tenant.id
+    })
     return {
-        "Authorization": f"Bearer {access_token}",
-        "X-Tenant-ID": str(test_tenant.id)
+        "Authorization": f"Bearer {access_token}"
+    }
+
+
+@pytest.fixture
+async def admin_headers(superuser: User) -> dict:
+    """Create authentication headers for superuser (no tenant_id needed)."""
+    access_token = create_access_token(data={"sub": str(superuser.id)})
+    return {
+        "Authorization": f"Bearer {access_token}"
     }
 
 
