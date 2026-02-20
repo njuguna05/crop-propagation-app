@@ -110,17 +110,25 @@ EOF
 chmod 440 /etc/sudoers.d/crop-deploy
 echo "   ✓ Done"
 
-# 9. Start services from the new locations
+# 9. Fix permissions so Nginx (www-data) can read frontend files
 echo ""
-echo "9. Starting services from new location..."
+echo "9. Fixing Nginx read permissions..."
+chmod o+x /home/humphrey_picidae
+chmod -R o+rX "$STAGING/frontend"
+echo "   ✓ Home directory traversable by www-data"
+echo "   ✓ Frontend files readable by www-data"
+
+# 10. Start services from the new locations
+echo ""
+echo "10. Starting services from new location..."
 systemctl start crop-propagation-api
 systemctl reload nginx
 echo "   ✓ Backend started from $STAGING/backend"
 echo "   ✓ Nginx reloaded, serving from $STAGING/frontend"
 
-# 10. Verify the running process is using the new path
+# 11. Verify the running process is using the new path
 echo ""
-echo "10. Verifying processes..."
+echo "11. Verifying processes..."
 sleep 2
 RUNNING_PATH=$(systemctl show crop-propagation-api --property=ExecStart | grep -o "$STAGING[^ ]*" | head -1 || true)
 if [ -n "$RUNNING_PATH" ]; then

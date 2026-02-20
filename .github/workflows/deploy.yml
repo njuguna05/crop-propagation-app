@@ -114,6 +114,9 @@ jobs:
 
             rsync -a --delete $REPO_DIR/build/ $STAGING/frontend/
 
+            # Ensure Nginx (www-data) can read the new frontend files
+            chmod -R o+rX $STAGING/frontend
+
             sudo systemctl reload nginx
 
             echo "Deployment completed successfully!"
