@@ -68,13 +68,31 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - name: Deploy to production server
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Build frontend on runner
+        run: |
+          npm ci --production=false
+          npm run build
+        env:
+          CI: false
+          REACT_APP_FLORA_API_URL: "http://102.210.148.91:8080/api/v1"
+          REACT_APP_MOCK_API: "false"
+          REACT_APP_DEBUG: "false"
+
+      - name: Deploy backend to server
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 20m
+          command_timeout: 10m
           script: |
             set -e
 
@@ -104,20 +122,25 @@ jobs:
 
             sudo systemctl restart crop-propagation-api
 
-            # --- Frontend deployment ---
-            cd $REPO_DIR
-            npm ci --production=false
-            CI=false \
-            REACT_APP_FLORA_API_URL="http://102.210.148.91:8080/api/v1" \
-            REACT_APP_MOCK_API="false" \
-            REACT_APP_DEBUG="false" \
-            npm run build
+      - name: Upload frontend build to server
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          rsync -az --delete \
+            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no" \
+            build/ \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/humphrey_picidae/crop-propagation/frontend/
+          rm -f /tmp/deploy_key
 
-            rsync -a --delete $REPO_DIR/build/ $STAGING/frontend/
-
-            # Ensure Nginx (www-data) can read the new frontend files
-            chmod -R o+rX $STAGING/frontend
-
+      - name: Fix permissions and reload Nginx
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 2m
+          script: |
+            chmod -R o+rX /home/humphrey_picidae/crop-propagation/frontend
+            chmod o+x /home/humphrey_picidae
             sudo systemctl reload nginx
-
             echo "Deployment completed successfully!"
