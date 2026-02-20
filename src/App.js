@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from './stores/appStore';
 import {
   Calendar,
@@ -19,12 +20,18 @@ import {
   Target,
   DollarSign,
   Users,
-  LogOut
+  LogOut,
+  ShoppingCart,
+  Truck
 } from 'lucide-react';
 import PropagationOrder from './PropagationOrder';
 import EmployeeManagement from './components/EmployeeManagement';
+import CustomerManagement from './components/CustomerManagement';
+import SupplierManagement from './components/SupplierManagement';
+import TenantSelector from './components/TenantSelector';
 
 const CropPropagationApp = () => {
+  const navigate = useNavigate();
   const {
     // State
     activeTab,
@@ -221,6 +228,8 @@ const CropPropagationApp = () => {
     { id: 'crops', label: 'Crops', icon: Leaf },
     { id: 'propagation', label: 'Orders', icon: Package },
     { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+    { id: 'customers', label: 'Customers', icon: ShoppingCart },
+    { id: 'suppliers', label: 'Suppliers', icon: Truck },
     { id: 'employees', label: 'Employees', icon: Users },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'analytics', label: 'Analytics', icon: TrendingUp }
@@ -323,6 +332,7 @@ const CropPropagationApp = () => {
         </div>
 
         <div className="flex items-center space-x-2">
+          <TenantSelector />
           <button
             onClick={() => setShowNewCrop(true)}
             className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
@@ -336,7 +346,11 @@ const CropPropagationApp = () => {
           >
             <LogOut className="w-5 h-5" />
           </button>
-          <button className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg">
+          <button
+            onClick={() => navigate('/tenants/settings')}
+            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg"
+            title="Organization Settings"
+          >
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -434,6 +448,10 @@ const CropPropagationApp = () => {
         return <PropagationOrder employees={employees} />;
       case 'tasks':
         return <TaskManagement />;
+      case 'customers':
+        return <CustomerManagement />;
+      case 'suppliers':
+        return <SupplierManagement />;
       case 'employees':
         return (
           <EmployeeManagement
@@ -769,10 +787,16 @@ const CropPropagationApp = () => {
       const fetchAnalyticsData = async () => {
         try {
           setLoading(true);
+          const apiBase = process.env.REACT_APP_FLORA_API_URL || 'http://127.0.0.1:8000/api/v1';
+          const authToken = localStorage.getItem('flora_auth_token');
+          const tenantId = localStorage.getItem('currentTenantId');
+          const headers = {};
+          if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+          if (tenantId) headers['X-Tenant-ID'] = tenantId;
           const [dashboardRes, performanceRes, successRes] = await Promise.all([
-            fetch('http://127.0.0.1:8000/api/v1/analytics/dashboard'),
-            fetch('http://127.0.0.1:8000/api/v1/analytics/performance'),
-            fetch('http://127.0.0.1:8000/api/v1/analytics/success-rates')
+            fetch(`${apiBase}/analytics/dashboard`, { headers }),
+            fetch(`${apiBase}/analytics/performance`, { headers }),
+            fetch(`${apiBase}/analytics/success-rates`, { headers })
           ]);
 
           const [dashboard, performance, success] = await Promise.all([
@@ -1085,7 +1109,10 @@ const CropPropagationApp = () => {
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex justify-between items-center py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Crop Propagation Manager</h1>
+              <div className="flex items-center space-x-4">
+                <h1 className="text-2xl font-bold text-gray-900">Crop Propagation Manager</h1>
+                <TenantSelector />
+              </div>
               <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-600">
                   {new Date().toLocaleDateString('en-US', {
@@ -1096,6 +1123,13 @@ const CropPropagationApp = () => {
                   })}
                 </span>
                 <button
+                  onClick={() => navigate('/tenants/settings')}
+                  className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Organization Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+                <button
                   onClick={logout}
                   className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="Logout"
@@ -1103,7 +1137,6 @@ const CropPropagationApp = () => {
                   <LogOut className="w-4 h-4" />
                   <span>Logout</span>
                 </button>
-                <Settings className="w-5 h-5 text-gray-600" />
               </div>
             </div>
 

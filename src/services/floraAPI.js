@@ -49,7 +49,7 @@ class FloraAPI {
         if (error.response?.status === 401) {
           // Token expired or invalid
           this.logout();
-          window.location.href = '/login';
+          window.location.href = '/';
         }
 
         // Handle network errors

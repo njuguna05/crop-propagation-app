@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import EnhancedLandingPage from './components/EnhancedLandingPage';
 import TenantCreation from './components/TenantCreation';
+import TenantSettings from './components/TenantSettings';
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import LoadingScreen from './components/LoadingScreen';
@@ -93,6 +94,8 @@ const AppWrapper = () => {
             </Routes>
           ) : (
             <Routes>
+              <Route path="/tenants/settings" element={<TenantSettings />} />
+              <Route path="/tenants/create" element={<TenantCreation />} />
               <Route path="/*" element={<App />} />
             </Routes>
           )}
