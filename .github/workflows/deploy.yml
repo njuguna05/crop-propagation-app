@@ -79,34 +79,7 @@ jobs:
             set -e
 
             REPO_DIR="/var/www/crop-propagation-app/repo"
-            OLD_APP="/var/www/crop-propagation-app"
             STAGING="/home/humphrey_picidae/staging"
-
-            # ---- One-time staging migration (safe to re-run) ----
-            if [ ! -d "$STAGING/backend/venv" ]; then
-              echo "First run: setting up staging directories..."
-              mkdir -p "$STAGING/backend" "$STAGING/frontend"
-
-              # Copy backend (including venv and .env) from old location
-              rsync -a \
-                --exclude='*.pyc' --exclude='__pycache__' --exclude='*.db' \
-                "$OLD_APP/backend/" "$STAGING/backend/"
-
-              # Update systemd service to point to staging
-              sudo sed -i "s|WorkingDirectory=$OLD_APP/backend|WorkingDirectory=$STAGING/backend|g" \
-                /etc/systemd/system/crop-propagation-api.service
-              sudo sed -i "s|EnvironmentFile=$OLD_APP/backend/.env|EnvironmentFile=$STAGING/backend/.env|g" \
-                /etc/systemd/system/crop-propagation-api.service
-              sudo sed -i "s|ExecStart=$OLD_APP/backend/venv/bin/uvicorn|ExecStart=$STAGING/backend/venv/bin/uvicorn|g" \
-                /etc/systemd/system/crop-propagation-api.service
-              sudo systemctl daemon-reload
-
-              # Update Nginx to serve from staging/frontend
-              sudo sed -i "s|root $OLD_APP/frontend;|root $STAGING/frontend;|g" \
-                /etc/nginx/sites-available/crop-propagation
-
-              echo "Staging migration complete."
-            fi
 
             # Pull latest code
             cd $REPO_DIR
