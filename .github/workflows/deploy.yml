@@ -79,7 +79,7 @@ jobs:
             set -e
 
             REPO_DIR="/var/www/crop-propagation-app/repo"
-            STAGING="/home/humphrey_picidae/staging"
+            STAGING="/home/humphrey_picidae/crop-propagation"
 
             # Pull latest code
             cd $REPO_DIR

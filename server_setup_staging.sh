@@ -8,7 +8,7 @@
 
 set -e
 
-STAGING="/home/humphrey_picidae/staging"
+STAGING="/home/humphrey_picidae/crop-propagation"
 OLD_APP="/var/www/crop-propagation-app"
 NGINX_CONF="/etc/nginx/sites-available/crop-propagation"
 SERVICE_FILE="/etc/systemd/system/crop-propagation-api.service"
