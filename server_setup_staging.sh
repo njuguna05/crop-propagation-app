@@ -14,11 +14,16 @@ NGINX_CONF="/etc/nginx/sites-available/crop-propagation"
 SERVICE_FILE="/etc/systemd/system/crop-propagation-api.service"
 USER="humphrey_picidae"
 
-echo "=== Setting up staging directory ==="
+echo "=== Setting up crop-propagation directory ==="
 echo ""
 
-# 1. Create staging dirs owned by the deploy user
-echo "1. Creating staging directories..."
+# 1. Rename old 'staging' folder if it exists, then create dirs
+echo "1. Creating directories..."
+OLD_STAGING="/home/humphrey_picidae/staging"
+if [ -d "$OLD_STAGING" ] && [ ! -d "$STAGING" ]; then
+    mv "$OLD_STAGING" "$STAGING"
+    echo "   ✓ Renamed $OLD_STAGING → $STAGING"
+fi
 mkdir -p "$STAGING/backend" "$STAGING/frontend"
 chown -R "$USER:$USER" "$STAGING"
 echo "   ✓ $STAGING/backend"
@@ -33,19 +38,25 @@ rsync -a \
 chown -R "$USER:$USER" "$STAGING/backend"
 echo "   ✓ Done"
 
-# 3. Update systemd service to point to staging/backend
+# 3. Update systemd service to point to crop-propagation/backend
 echo ""
 echo "3. Updating systemd service..."
+# Handle both old /var/www path and old ~/staging path
 sed -i "s|WorkingDirectory=$OLD_APP/backend|WorkingDirectory=$STAGING/backend|g" "$SERVICE_FILE"
+sed -i "s|WorkingDirectory=/home/humphrey_picidae/staging/backend|WorkingDirectory=$STAGING/backend|g" "$SERVICE_FILE"
 sed -i "s|EnvironmentFile=$OLD_APP/backend/.env|EnvironmentFile=$STAGING/backend/.env|g" "$SERVICE_FILE"
+sed -i "s|EnvironmentFile=/home/humphrey_picidae/staging/backend/.env|EnvironmentFile=$STAGING/backend/.env|g" "$SERVICE_FILE"
 sed -i "s|ExecStart=$OLD_APP/backend/venv/bin/uvicorn|ExecStart=$STAGING/backend/venv/bin/uvicorn|g" "$SERVICE_FILE"
+sed -i "s|ExecStart=/home/humphrey_picidae/staging/backend/venv/bin/uvicorn|ExecStart=$STAGING/backend/venv/bin/uvicorn|g" "$SERVICE_FILE"
 systemctl daemon-reload
 echo "   ✓ Service updated and daemon reloaded"
 
-# 4. Update Nginx to serve from staging/frontend
+# 4. Update Nginx to serve from crop-propagation/frontend
 echo ""
 echo "4. Updating Nginx config..."
+# Handle both old /var/www path and old ~/staging path
 sed -i "s|root $OLD_APP/frontend;|root $STAGING/frontend;|g" "$NGINX_CONF"
+sed -i "s|root /home/humphrey_picidae/staging/frontend;|root $STAGING/frontend;|g" "$NGINX_CONF"
 echo "   ✓ Nginx root → $STAGING/frontend"
 
 # 5. Add daemon-reload to sudoers so deploy script can call it if needed
