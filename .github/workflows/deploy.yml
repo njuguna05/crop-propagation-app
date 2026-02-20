@@ -79,7 +79,34 @@ jobs:
             set -e
 
             REPO_DIR="/var/www/crop-propagation-app/repo"
+            OLD_APP="/var/www/crop-propagation-app"
             STAGING="/home/humphrey_picidae/staging"
+
+            # ---- One-time staging migration (safe to re-run) ----
+            if [ ! -d "$STAGING/backend/venv" ]; then
+              echo "First run: setting up staging directories..."
+              mkdir -p "$STAGING/backend" "$STAGING/frontend"
+
+              # Copy backend (including venv and .env) from old location
+              rsync -a \
+                --exclude='*.pyc' --exclude='__pycache__' --exclude='*.db' \
+                "$OLD_APP/backend/" "$STAGING/backend/"
+
+              # Update systemd service to point to staging
+              sudo sed -i "s|WorkingDirectory=$OLD_APP/backend|WorkingDirectory=$STAGING/backend|g" \
+                /etc/systemd/system/crop-propagation-api.service
+              sudo sed -i "s|EnvironmentFile=$OLD_APP/backend/.env|EnvironmentFile=$STAGING/backend/.env|g" \
+                /etc/systemd/system/crop-propagation-api.service
+              sudo sed -i "s|ExecStart=$OLD_APP/backend/venv/bin/uvicorn|ExecStart=$STAGING/backend/venv/bin/uvicorn|g" \
+                /etc/systemd/system/crop-propagation-api.service
+              sudo systemctl daemon-reload
+
+              # Update Nginx to serve from staging/frontend
+              sudo sed -i "s|root $OLD_APP/frontend;|root $STAGING/frontend;|g" \
+                /etc/nginx/sites-available/crop-propagation
+
+              echo "Staging migration complete."
+            fi
 
             # Pull latest code
             cd $REPO_DIR
@@ -87,11 +114,9 @@ jobs:
             git reset --hard origin/main
 
             # --- Backend deployment ---
-            # Install/update Python dependencies into staging venv
             source $STAGING/backend/venv/bin/activate
             pip install -r $REPO_DIR/backend/requirements.txt --quiet
 
-            # Sync backend code to staging (preserve venv and .env)
             rsync -a --delete \
               --exclude='venv' \
               --exclude='.env' \
@@ -100,28 +125,22 @@ jobs:
               --exclude='*.db' \
               $REPO_DIR/backend/ $STAGING/backend/
 
-            # Run database migrations from staging
             cd $STAGING/backend
             source venv/bin/activate
             alembic upgrade head
 
-            # Restart backend service
             sudo systemctl restart crop-propagation-api
 
             # --- Frontend deployment ---
             cd $REPO_DIR
-
-            # Install dependencies and build
             npm ci --production=false
             REACT_APP_FLORA_API_URL="http://102.210.148.91:8080/api/v1" \
             REACT_APP_MOCK_API="false" \
             REACT_APP_DEBUG="false" \
             npm run build
 
-            # Deploy build to staging/frontend (user-owned, no root needed)
             rsync -a --delete $REPO_DIR/build/ $STAGING/frontend/
 
-            # Reload nginx
             sudo systemctl reload nginx
 
             echo "Deployment completed successfully!"
