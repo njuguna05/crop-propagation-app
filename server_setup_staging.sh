@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time root setup: creates staging directory and points services to it.
+# One-time root setup: migrate everything to ~/crop-propagation and stop old processes.
 #
 # Run on the server as root:
 #   ssh humphrey_picidae@102.210.148.91
@@ -12,56 +12,95 @@ STAGING="/home/humphrey_picidae/crop-propagation"
 OLD_APP="/var/www/crop-propagation-app"
 NGINX_CONF="/etc/nginx/sites-available/crop-propagation"
 SERVICE_FILE="/etc/systemd/system/crop-propagation-api.service"
-USER="humphrey_picidae"
+DEPLOY_USER="humphrey_picidae"
 
-echo "=== Setting up crop-propagation directory ==="
+echo "=== Migrating to /home/humphrey_picidae/crop-propagation ==="
 echo ""
 
-# 1. Rename old 'staging' folder if it exists, then create dirs
-echo "1. Creating directories..."
+# 1. Stop the running backend service before migrating
+echo "1. Stopping backend service..."
+systemctl stop crop-propagation-api || true
+echo "   ✓ Stopped"
+
+# 2. Kill any stray uvicorn processes still using the old path
+echo ""
+echo "2. Killing any stray uvicorn processes..."
+pkill -f "$OLD_APP/backend/venv/bin/uvicorn" 2>/dev/null || true
+pkill -f "/home/humphrey_picidae/staging/backend/venv/bin/uvicorn" 2>/dev/null || true
+echo "   ✓ Done"
+
+# 3. Create the new directory (rename old ~/staging if it exists)
+echo ""
+echo "3. Creating ~/crop-propagation directories..."
 OLD_STAGING="/home/humphrey_picidae/staging"
 if [ -d "$OLD_STAGING" ] && [ ! -d "$STAGING" ]; then
     mv "$OLD_STAGING" "$STAGING"
-    echo "   ✓ Renamed $OLD_STAGING → $STAGING"
+    echo "   ✓ Renamed ~/staging → ~/crop-propagation"
 fi
 mkdir -p "$STAGING/backend" "$STAGING/frontend"
-chown -R "$USER:$USER" "$STAGING"
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$STAGING"
 echo "   ✓ $STAGING/backend"
 echo "   ✓ $STAGING/frontend"
 
-# 2. Copy backend (venv + .env + code) to staging
+# 4. Copy backend (code + venv + .env) from old location to staging
 echo ""
-echo "2. Copying backend to staging..."
+echo "4. Copying backend to ~/crop-propagation/backend..."
 rsync -a \
   --exclude='*.pyc' --exclude='__pycache__' --exclude='*.db' \
   "$OLD_APP/backend/" "$STAGING/backend/"
-chown -R "$USER:$USER" "$STAGING/backend"
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$STAGING/backend"
 echo "   ✓ Done"
 
-# 3. Update systemd service to point to crop-propagation/backend
+# 5. Copy current frontend build so the site isn't blank
 echo ""
-echo "3. Updating systemd service..."
-# Handle both old /var/www path and old ~/staging path
-sed -i "s|WorkingDirectory=$OLD_APP/backend|WorkingDirectory=$STAGING/backend|g" "$SERVICE_FILE"
-sed -i "s|WorkingDirectory=/home/humphrey_picidae/staging/backend|WorkingDirectory=$STAGING/backend|g" "$SERVICE_FILE"
-sed -i "s|EnvironmentFile=$OLD_APP/backend/.env|EnvironmentFile=$STAGING/backend/.env|g" "$SERVICE_FILE"
-sed -i "s|EnvironmentFile=/home/humphrey_picidae/staging/backend/.env|EnvironmentFile=$STAGING/backend/.env|g" "$SERVICE_FILE"
-sed -i "s|ExecStart=$OLD_APP/backend/venv/bin/uvicorn|ExecStart=$STAGING/backend/venv/bin/uvicorn|g" "$SERVICE_FILE"
-sed -i "s|ExecStart=/home/humphrey_picidae/staging/backend/venv/bin/uvicorn|ExecStart=$STAGING/backend/venv/bin/uvicorn|g" "$SERVICE_FILE"
+echo "5. Copying frontend to ~/crop-propagation/frontend..."
+if [ -d "$OLD_APP/frontend" ] && [ "$(ls -A $OLD_APP/frontend 2>/dev/null)" ]; then
+    rsync -a "$OLD_APP/frontend/" "$STAGING/frontend/"
+    chown -R "$DEPLOY_USER:$DEPLOY_USER" "$STAGING/frontend"
+    echo "   ✓ Done"
+else
+    echo "   ! Old frontend empty — will be populated on next deploy"
+fi
+
+# 6. Rewrite the systemd service to point to the new paths
+echo ""
+echo "6. Updating systemd service file..."
+cat > "$SERVICE_FILE" << UNIT
+[Unit]
+Description=Crop Propagation FastAPI Backend
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=$DEPLOY_USER
+Group=$DEPLOY_USER
+WorkingDirectory=$STAGING/backend
+EnvironmentFile=$STAGING/backend/.env
+ExecStart=$STAGING/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 9000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
 systemctl daemon-reload
-echo "   ✓ Service updated and daemon reloaded"
+echo "   ✓ Service now runs from $STAGING/backend"
 
-# 4. Update Nginx to serve from crop-propagation/frontend
+# 7. Rewrite Nginx config root to new frontend path
 echo ""
-echo "4. Updating Nginx config..."
-# Handle both old /var/www path and old ~/staging path
-sed -i "s|root $OLD_APP/frontend;|root $STAGING/frontend;|g" "$NGINX_CONF"
-sed -i "s|root /home/humphrey_picidae/staging/frontend;|root $STAGING/frontend;|g" "$NGINX_CONF"
-echo "   ✓ Nginx root → $STAGING/frontend"
+echo "7. Updating Nginx to serve from ~/crop-propagation/frontend..."
+# Replace any existing root directive (old /var/www or old ~/staging)
+sed -i "s|root .*/frontend;|root $STAGING/frontend;|g" "$NGINX_CONF"
+# Verify
+NGINX_ROOT=$(grep "root " "$NGINX_CONF" | head -1 | xargs)
+echo "   ✓ $NGINX_ROOT"
 
-# 5. Add daemon-reload to sudoers so deploy script can call it if needed
+# 8. Update sudoers
 echo ""
-echo "5. Updating sudoers..."
+echo "8. Updating sudoers..."
 cat > /etc/sudoers.d/crop-deploy << 'EOF'
 humphrey_picidae ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart crop-propagation-api
 humphrey_picidae ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload nginx
@@ -69,31 +108,40 @@ humphrey_picidae ALL=(ALL) NOPASSWD: /usr/bin/systemctl status crop-propagation-
 humphrey_picidae ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 EOF
 chmod 440 /etc/sudoers.d/crop-deploy
-echo "   ✓ Sudoers updated"
+echo "   ✓ Done"
 
-# 6. Restart services
+# 9. Start services from the new locations
 echo ""
-echo "6. Restarting services..."
-systemctl restart crop-propagation-api
+echo "9. Starting services from new location..."
+systemctl start crop-propagation-api
 systemctl reload nginx
-echo "   ✓ Backend restarted"
-echo "   ✓ Nginx reloaded"
+echo "   ✓ Backend started from $STAGING/backend"
+echo "   ✓ Nginx reloaded, serving from $STAGING/frontend"
 
-# 7. Health check
+# 10. Verify the running process is using the new path
 echo ""
-echo "7. Health check..."
+echo "10. Verifying processes..."
 sleep 2
+RUNNING_PATH=$(systemctl show crop-propagation-api --property=ExecStart | grep -o "$STAGING[^ ]*" | head -1 || true)
+if [ -n "$RUNNING_PATH" ]; then
+    echo "   ✓ Backend running from: $RUNNING_PATH"
+else
+    echo "   ✓ Backend service active: $(systemctl is-active crop-propagation-api)"
+fi
+
 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9000/health 2>/dev/null || echo "000")
 if [ "$HTTP_STATUS" = "200" ]; then
-    echo "   ✓ Backend healthy"
+    echo "   ✓ Backend health check passed (HTTP 200)"
 else
     echo "   ! Backend returned HTTP $HTTP_STATUS"
-    echo "     Check: journalctl -u crop-propagation-api -n 30"
+    echo "     Check logs: journalctl -u crop-propagation-api -n 30"
 fi
 
 echo ""
-echo "=== Setup complete ==="
-echo "  Backend  → $STAGING/backend"
-echo "  Frontend → $STAGING/frontend"
+echo "=== Migration complete ==="
 echo ""
-echo "You can now push to main and the deployment will work."
+echo "  Backend  → $STAGING/backend  (port 9000)"
+echo "  Frontend → $STAGING/frontend (served by Nginx on port 8080)"
+echo ""
+echo "Old /var/www paths are no longer used."
+echo "Push to main to trigger the first deployment to the new location."
