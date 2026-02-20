@@ -1,6 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
+// Mock react-router-dom to avoid ESM module issues in Jest
+jest.mock('react-router-dom', () => ({
+  useNavigate: () => jest.fn(),
+  useLocation: () => ({ pathname: '/' }),
+  useParams: () => ({}),
+}));
+
 // Mock recharts to avoid JSDOM rendering issues
 jest.mock('recharts', () => {
   const OriginalModule = jest.requireActual('recharts');
@@ -24,6 +31,13 @@ jest.mock('recharts', () => {
   };
 });
 
+// Mock TenantSelector to avoid useNavigate dependency in tests
+jest.mock('./components/TenantSelector', () => () => <div data-testid="tenant-selector" />);
+
+// Mock CustomerManagement and SupplierManagement to avoid API calls in tests
+jest.mock('./components/CustomerManagement', () => () => <div data-testid="customer-management" />);
+jest.mock('./components/SupplierManagement', () => () => <div data-testid="supplier-management" />);
+
 // Mock zustand store
 jest.mock('./stores/appStore', () => ({
   useAppStore: () => ({
@@ -40,11 +54,16 @@ jest.mock('./stores/appStore', () => ({
     showNewCrop: false,
     showNewOrder: false,
     searchTerm: '',
+    currentTenant: null,
+    userTenants: [],
+    tenantRole: null,
     setActiveTab: jest.fn(),
     setSearchTerm: jest.fn(),
     setSelectedCrop: jest.fn(),
     setShowNewCrop: jest.fn(),
     setShowNewOrder: jest.fn(),
+    setCurrentTenant: jest.fn(),
+    setUserTenants: jest.fn(),
     isAuthenticated: true,
     isOnline: true,
     user: { username: 'testuser', full_name: 'Test User' },

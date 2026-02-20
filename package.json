@@ -39,7 +39,9 @@
       "node_modules/(?!(axios)/)"
     ],
     "moduleNameMapper": {
-      "^axios$": "axios/dist/node/axios.cjs"
+      "^axios$": "axios/dist/node/axios.cjs",
+      "^react-router-dom$": "<rootDir>/node_modules/react-router-dom/dist/index.js",
+      "^react-router$": "<rootDir>/node_modules/react-router/dist/development/index.js"
     }
   },
   "browserslist": {
