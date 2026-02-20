@@ -19,7 +19,7 @@ import {
     updateUserRole,
     updateTenantSettings
 } from '../services/tenantAPI';
-import useAppStore from '../stores/appStore';
+import { useAppStore } from '../stores/appStore';
 
 const TenantSettings = () => {
     const { currentTenant, tenantRole } = useAppStore();

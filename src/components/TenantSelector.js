@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Plus, Building } from 'lucide-react';
-import useAppStore from '../stores/appStore';
+import { useAppStore } from '../stores/appStore';
 import { getTenants } from '../services/tenantAPI';
 
 const TenantSelector = () => {
