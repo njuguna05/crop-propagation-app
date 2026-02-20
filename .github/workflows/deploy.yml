@@ -107,6 +107,7 @@ jobs:
             # --- Frontend deployment ---
             cd $REPO_DIR
             npm ci --production=false
+            CI=false \
             REACT_APP_FLORA_API_URL="http://102.210.148.91:8080/api/v1" \
             REACT_APP_MOCK_API="false" \
             REACT_APP_DEBUG="false" \
