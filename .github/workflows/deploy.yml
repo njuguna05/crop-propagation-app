@@ -78,8 +78,8 @@ jobs:
           script: |
             set -e
 
-            APP_DIR="/var/www/crop-propagation-app"
-            REPO_DIR="$APP_DIR/repo"
+            REPO_DIR="/var/www/crop-propagation-app/repo"
+            STAGING="/home/humphrey_picidae/staging"
 
             # Pull latest code
             cd $REPO_DIR
@@ -87,23 +87,21 @@ jobs:
             git reset --hard origin/main
 
             # --- Backend deployment ---
-            cd $REPO_DIR/backend
+            # Install/update Python dependencies into staging venv
+            source $STAGING/backend/venv/bin/activate
+            pip install -r $REPO_DIR/backend/requirements.txt --quiet
 
-            # Activate virtual environment and install dependencies
-            source $APP_DIR/backend/venv/bin/activate
-            pip install -r requirements.txt --quiet
-
-            # Copy backend code to deployment directory
+            # Sync backend code to staging (preserve venv and .env)
             rsync -a --delete \
               --exclude='venv' \
               --exclude='.env' \
               --exclude='__pycache__' \
               --exclude='*.pyc' \
               --exclude='*.db' \
-              $REPO_DIR/backend/ $APP_DIR/backend/
+              $REPO_DIR/backend/ $STAGING/backend/
 
-            # Run database migrations
-            cd $APP_DIR/backend
+            # Run database migrations from staging
+            cd $STAGING/backend
             source venv/bin/activate
             alembic upgrade head
 
@@ -120,8 +118,8 @@ jobs:
             REACT_APP_DEBUG="false" \
             npm run build
 
-            # Deploy build to web root
-            rsync -a --delete $REPO_DIR/build/ $APP_DIR/frontend/
+            # Deploy build to staging/frontend (user-owned, no root needed)
+            rsync -a --delete $REPO_DIR/build/ $STAGING/frontend/
 
             # Reload nginx
             sudo systemctl reload nginx
